@@ -82,8 +82,8 @@ def extract_member_info_llm(conversation_data: Dict[str, Any], chat_app: ChatApp
         ])
         
         # Parse the LLM response as JSON
-        response_content = response.content.strip()
-        
+        response_content = response.content.strip() if response.content else ""
+                
         # Remove markdown code blocks if present
         if response_content.startswith('```json'):
             response_content = response_content.replace('```json', '').replace('```', '').strip()
@@ -181,8 +181,8 @@ def main():
     """
     Test function to test LLM extraction module.
     """
-    
-    chat_app = ChatApplication(api_key=os.getenv("OPENAI_API_KEY"), model=os.getenv("OPENAI_MODEL"), endpoint=os.getenv("OPENAI_ENDPOINT"))
+
+    chat_app = ChatApplication(api_key=os.getenv("OPENAI_API_KEY", ""), model=os.getenv("OPENAI_MODEL", ""), endpoint=os.getenv("OPENAI_ENDPOINT", ""))
 
     conversation_data = User_2
     result = extract_member_info_llm(conversation_data, chat_app)

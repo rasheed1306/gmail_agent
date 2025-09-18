@@ -281,6 +281,7 @@ dependencies = [
     { name = "openai" },
     { name = "requests" },
     { name = "response" },
+    { name = "rich" },
     { name = "supabase" },
 ]
 
@@ -299,6 +300,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.101.0" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "response", specifier = ">=0.5.0" },
+    { name = "rich", specifier = ">=14.1.0" },
     { name = "supabase", specifier = ">=2.18.1" },
 ]
 

@@ -12,7 +12,19 @@ import json
 import time
 from datetime import datetime
 from google_cloud import GmailWorkflow
+import csv
 
+
+# Rich imports
+from rich.console import Console
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.markdown import Markdown
+
+
+
+# Initialize Rich Console
+console = Console()
 
 # System message that defines Rafael's persona and behavior as RAID's AI agent
 system_message = """
@@ -91,22 +103,29 @@ class IntegratedWorkflow:
     
     def __init__(self):
         """Initialize the integrated workflow system"""
+        # console.print("[magenta]RAID Club Email Agent - Integrated Workflow[/magenta]")
+        
         self.workflow = GmailWorkflow()
         self.chat_app = None
         self.supabase = create_client(os.getenv("DATABASE_URL", ""), os.getenv("DATABASE_API_KEY", ""))
         self.active_threads = {}  # Track active conversation threads
         
+        console.print("[green]✓[/green] Workflow components initialized")
+        
     def setup_chat_application(self):
         """Setup the chat application with enhanced context"""
-        context = self.read_files_content()
-        enhanced_system_message = f"{system_message}\n\nBelow is the context from our reference files. Please use this information to inform your responses:{context}"
+        with console.status("[yellow]Setting up AI chat application...", spinner="dots"):
+            context = self.read_files_content()
+            enhanced_system_message = f"{system_message}\n\nBelow is the context from our reference files. Please use this information to inform your responses:{context}"
+            
+            self.chat_app = ChatApplication(
+                api_key=os.getenv("OPENAI_API_KEY", ""),
+                model=os.getenv("OPENAI_MODEL", ""),
+                endpoint=os.getenv("OPENAI_ENDPOINT", ""),
+                system_message=system_message
+            )
         
-        self.chat_app = ChatApplication(
-            api_key=os.getenv("OPENAI_API_KEY", ""),
-            model=os.getenv("OPENAI_MODEL", ""),
-            endpoint=os.getenv("OPENAI_ENDPOINT", ""),
-            system_message=system_message
-        )
+        console.print("[green]✓[/green] AI Chat Application ready")
 
     def read_files_content(self):
         """Read the content of the text files and return as a string"""
@@ -119,10 +138,11 @@ class IntegratedWorkflow:
                 if os.path.exists(file_path):
                     with open(file_path, 'r', encoding='utf-8') as file:
                         files_content += f"\n\n--- Content from {file_name} ---\n{file.read()}"
+                    console.print(f"[green]✓[/green] Filename {file_name} loaded successfully")
                 else:
-                    print(f"Warning: {file_name} not found in src directory")
+                    console.print(f"[yellow] ⚠ Warning: [/yellow] {file_name} not found")
             except Exception as e:
-                print(f"Error reading {file_name}: {e}")
+                console.print(f"[red]✗ [/red] Error reading {file_name}: {e}")
         
         return files_content
 
@@ -160,42 +180,80 @@ class IntegratedWorkflow:
             )
 
         if self.chat_app is None:
+            console.print("[red]✗ [/red] ChatApplication not initialized")
             raise ValueError("ChatApplication is not initialized. Please ensure setup_chat_application() is called before generating a response.")
+        
         response: str = self.chat_app.process_user_input(prompt)
         return response
+    
+    def read_emails_from_csv(self) -> list[str]:
+        """Read emails from CSV file and return list of email addresses"""
+        user_emails = []
+        try:
+            # Get the directory where this script is located, then find the CSV
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            csv_path = os.path.join(script_dir, "email_address.csv")
+            with open(csv_path, 'r', encoding='utf-8') as csv_file:
+                reader = csv.DictReader(csv_file)
+                for row in reader:
+                    email = row.get('Email_Address', '').strip()
+                    if email:
+                        user_emails.append(email)
+            console.print(f"[green]✓ [/green] Loaded {len(user_emails)} emails from CSV")
+        except Exception as e:
+            console.print(f"[red]✗ [/red] Error reading CSV: {e}")
+
+        return user_emails
+    
 
     def start_conversation_flow(self, user_emails: list):
         """Start the conversation flow for multiple users"""
+        
         for email in user_emails:
             try:
+                console.status(f"[yellow]→ Processing {email}...[/yellow]", spinner="dots")
+                
                 # Generate initial AI response
                 initial_response = self.generate_response(email, 0)
+                
                 # Post-process email body and markdowns to format in HTML
                 formatted_body = self.format_email_body(initial_response)
+                
                 # Send initial email
                 thread_id = self.workflow.send_initial_email(
                     recipient=email,
                     subject="Welcome to RAID!",
                     body=formatted_body
                 )
+                
                 # Track the thread
                 self.active_threads[thread_id] = {
                     'email': email,
                     'step': 0,
                     'started_at': datetime.now()
                 }
-                print(f"Started conversation with {email} - Thread: {thread_id}")
+                
+                console.print(f"[green]✓ [/green] Conversation started with {email}")
+                console.print(f"[green]✓ [/green] Thread ID: {thread_id}...")
+                
             except Exception as e:
-                print(f"Error starting conversation with {email}: {e}")
+                console.print(f"[red]✗ [/red] Error starting conversation with {email}: {e}")
+
+    def display_workflow_status(self):
+        """Display current workflow status"""
+        if not self.active_threads:
+            console.print("[yellow] Warning ⚠ [/yellow] No active conversations")
+            return
+        
+        for thread_id, info in self.active_threads.items():
+            console.print(f"{info['email']} - Thread {thread_id}... (Step {info['step']})")
 
     async def run_workflow(self):
         """Main workflow execution"""
         try:
             # Setup components
-            print("Setting up chat application...")
             self.setup_chat_application()
             
-            print("Setting up enhanced Pub/Sub listener...")
             # Setup enhanced integration with AI chat app and active threads
             self.workflow.setup_enhanced_integration(
                 chat_app=self.chat_app,
@@ -203,39 +261,44 @@ class IntegratedWorkflow:
             )
             
             # Start Gmail listener
-            print("Starting Gmail listener...")
             listener_future = self.workflow.start_listening()
             
             # Define target users
-            user_emails = [os.getenv("RECIPIENT_TEST_EMAIL", "")]
+            # TODO implement CSV reader
+            try:
+                user_emails = self.read_emails_from_csv()
+            except Exception as e:
+                user_emails = os.getenv("RECIPIENT_TEST_EMAIL", "")
+                user_emails = [user_emails]
+
+            for email in user_emails:
+                print(email)
+
+                        
             
             # Start conversations
-            print("Starting conversation flows...")
+            console.print()
             self.start_conversation_flow(user_emails)
             
+            # Display status
+            console.print()
+            self.display_workflow_status()
+            
             # Keep the workflow running
-            print("Workflow running. Press Ctrl+C to stop.")
+            console.print(Rule(style="white"))
+            console.print("[dim]Press Ctrl+C to stop[/dim]")
+            console.print("[green]Workflow active - Rafael monitoring for incoming emails ...[/green]")
+            
             try:
                 while True:
                     await asyncio.sleep(1)
             except KeyboardInterrupt:
-                print("Stopping workflow...")
+                console.print("\n[yellow]Shutting down workflow...[/yellow]")
                 self.workflow.stop_listening(listener_future)
-                
-            # Process sample data (keep existing functionality)
-        #     print("Processing sample data...")
-        #     try:
-        #         if self.chat_app is None:
-        #             raise ValueError("ChatApplication is not initialized. Please ensure setup_chat_application() is called before this step.")
-                
-        #         self.supabase.table("club_applications").upsert(extract_member_info_llm(User_1, self.chat_app)).execute()
-        #         self.supabase.table("club_applications").upsert(extract_member_info_llm(User_2, self.chat_app)).execute()
-        #         print("Sample data processed successfully")
-        #     except Exception as e:
-        #         print(f"Error processing sample data: {e}")
+                console.print("[red]Workflow stopped[/red]")
                 
         except Exception as e:
-            print(f"Error in workflow execution: {e}")
+            console.print(f"[red]Critical error in workflow execution: {e}[/red]")
 
 async def main():
     """
@@ -246,9 +309,8 @@ async def main():
     4. Waits for responses and continues conversation loop (up to 3 exchanges)
     5. Processes sample data for database storage
     """
-    
     workflow = IntegratedWorkflow()
     await workflow.run_workflow()
-
+    
 if __name__ == "__main__":
     asyncio.run(main())

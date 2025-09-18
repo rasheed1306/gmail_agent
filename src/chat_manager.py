@@ -27,12 +27,18 @@ class LLMManager:
 
     def generate_response(self, messages, tools=None):
         """Generate a response from the LLM with optional tools."""
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto" if tools else None
-        )
+        if tools:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto"
+            )
+        else:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages
+            )
         return response.choices[0].message
 
 # Define a class for managing tools/functions
@@ -151,23 +157,30 @@ class ChatApplication:
         if hasattr(response, 'tool_calls') and response.tool_calls:
             # Process each tool call
             for tool_call in response.tool_calls:
-                function_name = tool_call.function.name
-                arguments = json.loads(tool_call.function.arguments)
+                function = getattr(tool_call, 'function', None)
+                if not function:
+                    continue
+                function_name = getattr(function, 'name', None)
+                args_raw = getattr(function, 'arguments', None)
+                if not function_name or args_raw is None:
+                    continue
+                arguments = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
 
                 try:
                     # Execute the tool
                     result = self.tool_manager.execute_tool(function_name, arguments)
 
                     # Add tool result to context
+                    tool_call_id = getattr(tool_call, 'id', None) or "tool_call"
                     self.context.add_tool_result(
-                        tool_call.id,
+                        tool_call_id,
                         function_name,
                         str(result) if not isinstance(result, dict) else json.dumps(result)
                     )
                 except Exception as e:
                     # Handle errors
                     error_message = f"Error executing tool {function_name}: {str(e)}"
-                    self.context.add_tool_result(tool_call.id, function_name, error_message)
+                    self.context.add_tool_result(tool_call_id, function_name, error_message)
 
             # Get final response from LLM with tool results
             final_response = self.llm_manager.generate_response(self.context.get_messages())

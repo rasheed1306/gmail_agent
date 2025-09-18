@@ -5,6 +5,7 @@ An autonomous AI system that manages email correspondence with new RAID (Respons
 ## What It Does
 
 - **Initiates conversations** with new members through personalized welcome emails
+- **Handles multiple users** by reading recipient emails from `email_address.csv`
 - **Extracts key information** using LLM analysis of email exchanges
 - **Stores structured data** in Postgres/Supabase for member management
 - **Processes Gmail events** via Google Pub/Sub push notifications
@@ -53,15 +54,25 @@ CREATE INDEX IF NOT EXISTS idx_workflows_thread_id ON workflows(thread_id);
 
 1. Install dependencies: `uv install`
 
-2. **Database Setup (Required for google-cloud-test.py)**
+2. **Configure Email Recipients**
+
+   - Create `src/email_address.csv` with the following format:
+     ```csv
+     Name,Email_Address
+     John Doe,john.doe@example.com
+     Jane Smith,jane.smith@example.com
+     ```
+   - This file controls which users receive initial welcome emails and enables handling multiple conversations simultaneously
+
+3. **Database Setup (Required for google-cloud-test.py)**
 
    - Create Supabase account at [supabase.com](https://supabase.com) or setup local PostgreSQL
    - Run the database schema above
    - Add to `.env`: `DATABASE_URL=your_connection_string` and `DATABASE_API_KEY=your_key`
 
-3. Environment variables: copy `.env.example` → `.env`, then `source .env`
+4. Environment variables: copy `.env.example` → `.env`, then `source .env`
 
-4. Google Cloud (Gmail Push + Pub/Sub)
+5. Google Cloud (Gmail Push + Pub/Sub)
 
    - Install gcloud SDK: see [Install the Google Cloud CLI](https://cloud.google.com/sdk/docs/install)
    - Authenticate and set project:
@@ -84,16 +95,19 @@ CREATE INDEX IF NOT EXISTS idx_workflows_thread_id ON workflows(thread_id);
      --project=${PROJECT_ID}
      ```
 
-5. Run
-   - Orchestrator: `uv run main.py`
-   - Pub/Sub listener (awaits indefinitely): `uv run google_cloud.py`
+6. Run
+
+- Orchestrator (older workflow, single-reply, ~5 min await, no Pub/Sub): `uv run main.py`
+- Integrated workflow (with CSV): `uv run src/mainV2.py`
 
 ## Files
 
-- `main.py` — Main orchestration
+- `main.py` — Older workflow (no Pub/Sub, awaits up to ~5 minutes, can only reply once per user; not designed for multi-exchange conversations)
+- `mainV2.py` — Integrated workflow with CSV email loading, Database logging, Event driven pub/sub architecture
 - `google_cloud.py` — Pub/Sub listener for Gmail push events
 - `chat_manager.py` — LLM chat system
 - `LLM_Extraction.py` — Information extraction
+- `email_address.csv` — List of recipient emails for bulk conversations
 - `.env.example` — Environment template
 
 ## Current Status
