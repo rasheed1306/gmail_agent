@@ -1,4 +1,5 @@
 import base64
+import markdown
 import json
 import os
 import time
@@ -127,19 +128,22 @@ class GmailWorkflow:
     def send_initial_email(self, recipient: str, subject: str, body: str, name: str) -> str:
         """Send first email and create workflow record"""
         # Use HTML content type and wrap body in HTML template for better formatting
-        html_body = f"""
-<html>
-  <body style=\"font-family: Arial, sans-serif; font-size: 15px; color: #222;\">
-    {body}
-  </body>
-</html>
-"""
+        # Create email content with proper MIME structure
+        email_content = [
+            f"To: {recipient}",
+            f"Subject: {subject}",
+            "MIME-Version: 1.0",
+            "Content-Type: text/html; charset=utf-8",
+            "",  # Empty line separates headers from body
+            f"<html><body style='font-family: Arial, sans-serif; font-size: 15px; color: #222;'>",
+            body,  # Body already contains HTML from markdown conversion
+            "</body></html>"
+        ]
+        
+        # Join with proper line endings and encode
         message = {
             'raw': base64.urlsafe_b64encode(
-                f"To: {recipient}\r\n"
-                f"Subject: {subject}\r\n"
-                f"Content-Type: text/html; charset=utf-8\r\n"
-                f"\r\n{html_body}".encode('utf-8')
+                '\r\n'.join(email_content).encode('utf-8')
             ).decode()
         }
         
@@ -331,7 +335,18 @@ class GmailWorkflow:
                 if message_body:
                     # Display Rafael's response
                     self.display_rafael_message(message_body, f"Rafael - Follow-up #{step + 1}")
-                    
+                  
+                    # Convert markdown to HTML before sending
+                    html_body = markdown.markdown(
+                        message_body.strip(),
+                        output_format='html5',
+                        extensions=['extra', 'smarty']
+                    )
+                    # Wrap in div for consistent style (optional)
+                    html_body = f"<div style=\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\">{html_body}</div>"
+                    print(f"🤖 DEBUG: Using HTML-converted body (length: {len(html_body)})")
+
+                    subject = message_subject
                     self.send_reply_email(thread_id, message_body, message_body=message_body, message_subject=message_subject)
                     self.save_workflow_state(thread_id, step=step+1, status=f'sent_followup_{step+1}')
                 else:
@@ -342,7 +357,7 @@ class GmailWorkflow:
             elif step == 3:
                 self.save_workflow_state(thread_id, step=4, status='completed')
                 console.print(f"[green]✓ Conversation completed for thread {thread_id}...[/green]")
-
+                
         except Exception as e:
             console.print(f"[red]Error in workflow_manager: {e}[/red]")
 

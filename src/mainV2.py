@@ -1,4 +1,5 @@
 from chat_manager import ChatApplication
+import markdown
 import dotenv
 import os 
 from supabase import create_client, Client
@@ -32,8 +33,32 @@ Persona & Style: Write in a friendly, smart-casual, and conversational tone, mir
 Content and Structure: 
 Initial Email: Draft a welcome email to a new member. Start with a warm greeting, introduce yourself as RAID's latest agent, and ask them about their interests and major. Do not provide any event details in this initial email; the goal is to encourage a reply.
 Subsequent Emails: Once a conversation is generated and you have a good understanding of the user's interests, you will then provide information on upcoming events. The invitation to these events must be personalized based on the interests and major you have learned. The aim is to make the invitation feel tailored and highly relevant to the individual member.
-Constraints: Do not ask for any more information than what is specified above. The entire response should be under 250 words and ready to be used as a final output.
 
+Formatting: You MUST use markdown formatting in your responses:
+- Use **bold** for emphasis (e.g., "I'm **Rafael**, RAID's latest agent")
+- Use *italics* for subtle emphasis (e.g., "Our *exciting* upcoming workshop")
+- Use bullet points for lists (start lines with -)
+- Use proper paragraphs with blank lines between them
+- Add ## for subheadings if needed
+
+Example of properly formatted response:
+```
+Hey there!
+
+I'm **Rafael**, RAID's latest agent here at the *University of Melbourne*. It's great to have you join our community!
+
+I noticed you're interested in AI and wanted to learn more about:
+- Your current major
+- What aspects of AI interest you most
+- Any previous experience with AI/ML
+
+Looking forward to your response!
+
+Best,
+Rafael
+```
+
+Constraints: Do not ask for any more information than what is specified above. The entire response should be under 250 words and ready to be used as a final output.
 """
 root_dir = pathlib.Path(__file__).parent.parent
 dotenv.load_dotenv(root_dir / ".env")
@@ -43,22 +68,38 @@ class IntegratedWorkflow:
         """
         Post-processes the LLM output to format the email body with HTML tags for greeting, paragraphs, and signature.
         Removes markdown code block wrappers (```html ... ``` or ``` ... ```).
-        Assumes the LLM output is a plain text block with paragraphs separated by double newlines or single newlines.
+        Converts markdown in the LLM output to HTML for email.
         """
-        # Remove markdown code block wrappers if present
         cleaned = raw_body.strip()
         if cleaned.startswith('```html') and cleaned.endswith('```'):
             cleaned = cleaned[7:-3].strip()
         elif cleaned.startswith('```') and cleaned.endswith('```'):
             cleaned = cleaned[3:-3].strip()
-
-        paragraphs = [p.strip() for p in cleaned.split('\n\n') if p.strip()]
-        if not paragraphs:
-            paragraphs = [cleaned]
-
-        body_paragraphs = [f"<p>{p}</p>" for p in paragraphs]
-        html_body = '\n'.join(body_paragraphs)
-        return html_body
+            print("DEBUG - Removed code block wrapper")
+            
+        print(f"DEBUG - Before markdown conversion: {cleaned}")
+        
+        try:
+            # Convert markdown to HTML
+            html_body = markdown.markdown(
+                cleaned,
+                output_format='html5',
+                extensions=['extra', 'smarty']
+            )
+            print(f"DEBUG - Successfully converted to HTML: {html_body}")
+            
+            # Wrap in proper HTML structure
+            html_output = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+{html_body}
+</div>
+""".strip()
+            
+            return html_output
+            
+        except Exception as e:
+            print(f"DEBUG - Error in markdown conversion: {str(e)}")
+            return cleaned  # Fallback to cleaned text if conversion fails
     
     def __init__(self):
         """Initialize the integrated workflow system"""
@@ -110,18 +151,32 @@ class IntegratedWorkflow:
             # Initial welcome email
             prompt = (
                 f"Generate only the body of the initial welcome email for new member {user_email}. "
-                f"Do not include the subject line. The subject will be set separately. "
-                f"Format the body for use in an HTML email."
+                f"Do not include the subject line. The subject will be set separately. Use a friendly, "
+                f"conversational tone. You may use **bold** for important points or emphasis where appropriate."
             )
         elif step == 1:
             # First follow-up
-            prompt = f"Generate a follow-up email asking about their background and interests for {user_email}"
+            prompt = (
+                f"Generate a follow-up email for {user_email} in a friendly tone. When mentioning "
+                f"important information (like event names, dates, or key points), put them in "
+                f"double asterisks like this: **Important Info**. Ensure exactly two asterisks "
+                f"on each side, no extra spaces inside the asterisks. Keep the tone conversational."
+            )
         elif step == 2:
             # Second follow-up with more engagement
-            prompt = f"Generate a more engaging follow-up email for {user_email}, building on previous conversation"
+            prompt = (
+                f"Generate an engaging follow-up email for {user_email}, building on the previous conversation. "
+                f"For important information use: **Important Info** (no spaces between asterisks and text). "
+                f"For lists, use bullet points like this:\n* Item 1\n* Item 2\n"
+                f"Each bullet point should start with '* ' on a new line."
+            )
         else:
             # Final personalized invitation
-            prompt = f"Generate a personalized event invitation for {user_email} based on their interests"
+            prompt = (
+                f"Generate a personalized event invitation for {user_email}. Format important details "
+                f"using double asterisks like this: **Event Name**, **Date**, **Time**, **Location**. "
+                f"No spaces between asterisks and text."
+            )
 
         if self.chat_app is None:
             console.print("[red]✗ [/red] ChatApplication not initialized")
@@ -163,7 +218,7 @@ class IntegratedWorkflow:
                 # Generate initial AI response
                 initial_response = self.generate_response(email, 0)
                 
-                # Post-process to format as HTML body
+                # Post-process email body and markdowns to format in HTML
                 formatted_body = self.format_email_body(initial_response)
                 
                 # Send initial email
