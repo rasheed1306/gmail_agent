@@ -152,9 +152,9 @@ if __name__=="__main__":
     user_data={"email":"test@gmail.com", "name":"Test Name"}
     message_data={
                     "thread_id": "18a9f84f0c5d7bae",
-                    "message_id": "CAHkZjsD0eXAmpf",
+                    "message_id": "CAHkZjsD0eXBmpf",
                     "sender": "user", 
-                    "body": "This is the email text content.",
+                    "body": "This is the new email text content.",
                     "subject": "Re: Hello",
                     "timestamp":  datetime.now(timezone.utc)
                 }

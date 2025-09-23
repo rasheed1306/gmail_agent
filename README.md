@@ -59,7 +59,7 @@ CREATE TABLE emails (
     body TEXT NOT NULL,
     subject TEXT NOT NULL,
     timestamp TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (thread_id, email_id),
+    PRIMARY KEY (email_id),
     CONSTRAINT fk_emails_user_email
         FOREIGN KEY (user_email)
         REFERENCES email_users(email)
