@@ -29,36 +29,47 @@ An autonomous AI system that manages email correspondence with new RAID (Respons
 ## Database Schema
 
 ```sql
--- 1. Create the users table
+
+-- Clean up in dependency order in case you're rerunning the migration
+DROP TABLE IF EXISTS emails CASCADE;
+DROP TABLE IF EXISTS email_workflow CASCADE;
+DROP TABLE IF EXISTS email_users CASCADE;
 DROP TYPE IF EXISTS sender_type;
 
-
+-- 1) Enum for sender
 CREATE TYPE sender_type AS ENUM ('user', 'agent');
 
-CREATE TABLE users (
-    email TEXT PRIMARY KEY,
+-- 2) Users table (email directory for Gmail agent)
+CREATE TABLE email_users (
+    users_email_id SERIAL PRIMARY KEY,
+    email TEXT NOT NULL,
     name TEXT NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_email_users_email UNIQUE (email)
 );
 
-COMMENT ON TABLE users IS 'Stores user information for the Gmail agent.';
+COMMENT ON TABLE email_users IS 'Stores user information for the Gmail agent.';
 
--- 2. Create the messages table
-CREATE TABLE messages (
+-- 3) Emails (messages) table
+CREATE TABLE emails (
     thread_id TEXT NOT NULL,
-    message_id TEXT NOT NULL,
-    user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    email_id TEXT NOT NULL,
+    user_email TEXT NOT NULL,
     sender sender_type NOT NULL,
     body TEXT NOT NULL,
     subject TEXT NOT NULL,
     timestamp TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (thread_id, message_id)
+    PRIMARY KEY (email_id),
+    CONSTRAINT fk_emails_user_email
+        FOREIGN KEY (user_email)
+        REFERENCES email_users(email)
+        ON DELETE CASCADE
 );
 
-COMMENT ON TABLE messages IS 'Stores individual email messages for the Gmail agent.';
+COMMENT ON TABLE emails IS 'Stores individual email messages for the Gmail agent.';
 
--- 3. Create table for workflow logging
-CREATE TABLE IF NOT EXISTS workflows (
+-- 4) Workflow log table
+CREATE TABLE IF NOT EXISTS email_workflow (
   id SERIAL PRIMARY KEY,
   thread_id VARCHAR(255) UNIQUE NOT NULL,
   step INTEGER NOT NULL DEFAULT 0,
@@ -67,20 +78,14 @@ CREATE TABLE IF NOT EXISTS workflows (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- 4. Create Indexes for Performance
+-- 5) Indexes
+CREATE INDEX IF NOT EXISTS idx_emails_thread_id ON emails(thread_id);
+CREATE INDEX IF NOT EXISTS idx_emails_user_email ON emails(user_email);
+CREATE INDEX IF NOT EXISTS idx_emails_timestamp ON emails(timestamp);
+CREATE INDEX IF NOT EXISTS idx_email_workflow_thread_id ON email_workflow(thread_id);
 
--- Index for fetching all messages in a specific thread
-CREATE INDEX idx_messages_thread_id ON messages(thread_id);
+COMMIT;
 
--- Index for finding all messages for a specific user
-CREATE INDEX idx_messages_user_email ON messages(user_email);
-
--- Index for sorting messages chronologically within a thread
-CREATE INDEX idx_messages_timestamp ON messages(timestamp);
-
--- Index for filtering workflows for different threads
-CREATE INDEX IF NOT EXISTS idx_workflows_thread_id ON workflows(thread_id);
-```
 
 ## Setup
 
