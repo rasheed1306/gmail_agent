@@ -316,9 +316,22 @@ class GmailWorkflow:
                             }
                             
                             prompt = base_prompts.get(current_step, f"Generate a follow-up for {user_email_from_threads}")
+                            # Retry AI response generation up to 3 times
+                            max_ai_retries = 3
+                            ai_response = None
+                            for ai_attempt in range(max_ai_retries):
+                                try:
+                                    with console.status("[green]Generating response...[/green]", spinner="dots"):
+                                        ai_response = self.chat_app.process_user_input(prompt)
+                                    if ai_response:
+                                        break  # Success, exit retry loop
+                                except Exception:
+                                    pass  # Silent retry
                             
-                            ai_response = self.chat_app.process_user_input(prompt)
-                            
+                            # If all retries failed, use fallback
+                            if not ai_response:
+                                ai_response = "Thank you for your message! I'll prepare a more detailed response shortly."
+                                                           
                             self.workflow_manager(thread_id, current_step, message, message_body=ai_response, name=user_name)
                             return
                         except Exception as e:
@@ -530,12 +543,13 @@ class GmailWorkflow:
 
             # Send reply with retry logic
             max_retries = 3
-            reply_response = None
             try:
                 for attempt in range(max_retries):
                     try:
                         reply_response = self.service.users().messages().send(userId='me', body=reply_message).execute()
                         console.print(f"[dim]DEBUG: Gmail API call succeeded for reply on attempt {attempt+1}[/dim]")
+                        # Adding 3 second delay to ensure full processing
+                        time.sleep(3)
                         break  # Success, exit loop
                     except Exception as e:
                         if attempt < max_retries - 1:
