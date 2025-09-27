@@ -133,7 +133,7 @@ class IntegratedWorkflow:
             return html_output
             
         except Exception as e:
-            print(f"DEBUG - Error in markdown conversion: {str(e)}")
+            # print(f"DEBUG - Error in markdown conversion: {str(e)}")
             return cleaned  # Fallback to cleaned text if conversion fails
     
     def __init__(self):

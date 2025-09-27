@@ -151,7 +151,7 @@ class GmailWorkflow:
             ).decode()
         }
         
-        console.print(f"[dim]DEBUG: Starting send for {recipient} at {datetime.now()}[/dim]")
+        # console.print(f"[dim]DEBUG: Starting send for {recipient} at {datetime.now()}[/dim]")
         
         # Add retry to handle rate limiting 
         max_retries = 3           
@@ -159,7 +159,7 @@ class GmailWorkflow:
             for attempt in range(max_retries):
                 try:
                     sent_message = self.service.users().messages().send(userId='me', body=message).execute()
-                    console.print(f"[dim]DEBUG: Gmail API call succeeded for {recipient} on attempt {attempt+1}[/dim]")
+                    # console.print(f"[dim]DEBUG: Gmail API call succeeded for {recipient} on attempt {attempt+1}[/dim]")
                     break  # Success, exit loop
                 except Exception as e:
                     if attempt < max_retries - 1:
@@ -193,7 +193,7 @@ class GmailWorkflow:
             success, error = self.db.store_message({"email": recipient, "name": name}, message_dict)
             if not success:
                 console.print(f"[red]DB store failed for {recipient}: {error}[/red]")
-            console.print(f"[dim]DEBUG: DB store completed for {recipient}[/dim]")
+            # console.print(f"[dim]DEBUG: DB store completed for {recipient}[/dim]")
             
             
             return thread_id
